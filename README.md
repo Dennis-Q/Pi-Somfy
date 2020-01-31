@@ -87,7 +87,7 @@ If you decided to use Python 2, the last command will read instead:
 
 Next, let's test if it all works. Start <operateShutters.py> by typing:
 
-    sudo python /home/pi/Pi-Somfy/operateShutters.py
+    sudo python3 /home/pi/Pi-Somfy/operateShutters.py
 
 You should see the help text explaining the [Command Line Interface](documentation/p4.png)
 
@@ -129,17 +129,17 @@ sudo /home/pi/Pi-Somfy/operateShutters.py corridor -c /home/pi/Pi-Somfy/operateS
 
 2. Manually start Web interface only<br/>You can start the web-interface by typing:<br/>Once started, you can access the web interface at http://IPaddressOfYouPi:80. From there you can further modify your settings.   
 ```csh
-    sudo python /home/pi/Pi-Somfy/operateShutters.py -c /home/pi/Pi-Somfy/operateShutters.conf -a 
+    sudo python3 /home/pi/Pi-Somfy/operateShutters.py -c /home/pi/Pi-Somfy/operateShutters.conf -a 
 ```    
 
 3. Manually start Web interface and Alexa interface<br/>You can start the web-interface by typing:
 ```csh
-    sudo python /home/pi/Pi-Somfy/operateShutters.py -c /home/pi/Pi-Somfy/operateShutters.conf -a -e
+    sudo python3 /home/pi/Pi-Somfy/operateShutters.py -c /home/pi/Pi-Somfy/operateShutters.conf -a -e
 ```    
 
 4. Manually start Web interface and MQTT integration (for Home Assistant)<br/>You can start the web-interface by typing:
 ```csh
-    sudo python /home/pi/Pi-Somfy/operateShutters.py -c /home/pi/Pi-Somfy/operateShutters.conf -a -m
+    sudo python3 /home/pi/Pi-Somfy/operateShutters.py -c /home/pi/Pi-Somfy/operateShutters.conf -a -m
 ```    
 
 5. Finally, the recommended way to operate it is using crontab on boot time. You can do so by typing:
@@ -148,8 +148,8 @@ sudo /home/pi/Pi-Somfy/operateShutters.py corridor -c /home/pi/Pi-Somfy/operateS
 ```
 Note, that "crontab -e" will just open a console-based text editor that you can edit the crontab script. The first time you run "crontab -e" you will be prompted to choose the editor. I recommend nano. From the crontab window, add the following to the bottom of the crontab script
 
-    @reboot sleep 60;python /home/pi/Pi-Somfy/operateShutters.py -c /home/pi/Pi-Somfy/operateShutters.conf -a -e -m
-    0 * * * * python /home/pi/Pi-Somfy/operateShutters.py -c /home/pi/Pi-Somfy/operateShutters.conf -a -e -m
+    @reboot sleep 60;python3 /home/pi/Pi-Somfy/operateShutters.py -c /home/pi/Pi-Somfy/operateShutters.conf -a -e -m
+    0 * * * * python3 /home/pi/Pi-Somfy/operateShutters.py -c /home/pi/Pi-Somfy/operateShutters.conf -a -e -m
 
 And save the crontab schedule. (if using nano type press ctrl-o to save the file, ctrl-x to exit nano). Now, every time your system is booted operateShutters will start.
 
@@ -187,10 +187,89 @@ To lower your shutter via the Echo speaker, say "Alexa, turn on {SHUTTERNAME}". 
 
 If you prefer to state the likes of "Alexa, OPEN the shutter" or "Alexa, CLOSE the shutter" (rather than using the words ON or OFF), you can set up a Routine with Alexa.
 
+## 7 MQTT Integration (e.g. for Home Assistant)
 
-## 7 Credits
+While the MQTT integration was written specifically for [Home Assistant](https://www.home-assistant.io/), nothing is stopping the use of this integration for other purpose. But more on this later
+
+First, to use this integration, make sure you configure your `operateShutters.conf` with the right parameters. Look out for the following lines:
+
+``MQTT_Server = 192.168.1.x
+MQTT_Port = 1883
+MQTT_User = xxxxxxx
+MQTT_Password = xxxxxxx
+``
+and make sure they match the setup of you MQTT Broker. If you are using Home Assistant, you can conveniantly use the "Mosquitto broker" add-on inside Home Assistant. For more information refer to the relevant [Documentation](https://github.com/home-assistant/hassio-addons/tree/master/mosquitto)
+
+If you choose not to use the Home Assistant add-in, you can download the [Mosquitto Broker](https://mosquitto.org/) and refer to the [Broker configuration](https://mosquitto.org/man/mosquitto-8.html)
+
+Second start `operateShutter.py` with the "-m" option. This should look similar to this:
+
+```operateShutters.py -c /home/pi/Pi-Somfy/operateShutters.conf -a -m```
+
+And that's it, you are all set. 
+
+So if you use Home Assistant, you have 2 options:
+
+### a.) you use Home Assistant's [MQTT Discovery functionality](https://www.home-assistant.io/docs/mqtt/discovery/). 
+
+To do so, add the following line to `operateShutters.conf`
+
+```EnableDiscovery = true```
+
+and also add the following line to your `configuration.yaml` in Home Assistant:
+
+```
+   mqtt:
+   discovery: true
+```
+   
+Note that both Pi-Somfy & Home Assistant need to be restarted before this will work. Home Assistant will henceforth auto discover any new  shutters you add
+
+### b.) Don't use Home Assistants MQTT Discovery functionality.
+
+If so, no further changes are required to `operateShutters.conf`. However you will have to add the following lines to `configuration.yaml` in Home Assistant for ever shutter you have (replace 0x2670xx with the shutters actual RTS_Address, which you can get from your `operateShutters.conf` file): 
+
+```
+cover:
+   - platform: mqtt
+     name: '{SHUTTERNAME}'
+     payload_open: 100
+     payload_close: 0
+     command_topic: 'somfy/0x2670xx/level/cmd'
+     position_topic: 'somfy/0x2670xx/level/state'
+     set_position_topic: 'somfy/0x2670xx/level/cmd'
+     state_open: 100
+     state_closed: 0
+```
+
+And that's it! 
+
+Finally, in case of any difficulties with this integration, 2 more useful commands:
+
+### a.) See messages on the MQTT Broker
+If you want to see what messages are passed on the MQTT Broker, you can use the following to listen to all messages (assuming you set up mosquitto with a username and password):
+
+```
+mosquitto_sub -h 192.168.x.x -p 1883 -u [username]-P [password] -t '#' -v
+```
+
+### b.) Send messages to the MQTT Broker, for Pi-Somfy to pick up
+If you want to post a message to the MQTT Broker for your Pi-Somfy to pick up, you can use following to send messages (assuming you set up mosquitto with a username and password):
+
+```
+mosquitto_pub -h 192.168.x.x -p 1883 -u [username]-P [password] -t 'somfy/0x2670xx/level/cmd' -m '0'
+mosquitto_pub -h 192.168.x.x -p 1883 -u [username]-P [password] -t 'somfy/0x2670xx/level/cmd' -m '100'
+```
+
+Those 2 command will lower and rise your shutters.
+
+## 8 Credits
 This Library was ported from [Arduino sketch](https://github.com/Nickduino/Somfy_Remote) onto the Pi by @Nickduino to open and close his blinds automatically. 
 
 If you want to learn more about the Somfy RTS protocol, check out [Pushtack](https://pushstack.wordpress.com/somfy-rts-protocol/). 
 
 
+## 9 License
+![Image of the license](https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png)
+
+[Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
